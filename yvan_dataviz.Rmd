@@ -1,0 +1,193 @@
+---
+title: "Democracy project"
+author: "Yvan"
+date: "2024-07-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, echo = FALSE)
+# Load libraries
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(sf)        
+library(leaflet)   
+library(readxl)
+library(dplyr)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(maps)
+
+
+# Load the datasets
+wiid_data <- read_excel("~/Downloads/WIID_28NOV2023.xlsx")
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Select relevant columns
+wiid <- wiid_data %>%
+  select(country, year, gini, ratio_top20bottom20, bottom40, q1, q2, q3, q4, q5, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, mean, median, population)
+
+continents <- read_csv("~/Downloads/continents-according-to-our-world-in-data.csv")
+continents <- continents %>% select(Entity, Continent) %>% rename(country = Entity)
+
+wiid <- wiid %>% left_join(continents, by = "country")
+
+# Impute missing values for essential columns
+wiid <- wiid %>%
+  group_by(country) %>%
+  mutate(gini = ifelse(is.na(gini), median(gini, na.rm = TRUE), gini),
+         ratio_top20bottom20 = ifelse(is.na(ratio_top20bottom20), median(ratio_top20bottom20, na.rm = TRUE), ratio_top20bottom20),
+         bottom40 = ifelse(is.na(bottom40), median(bottom40, na.rm = TRUE), bottom40),
+         population = ifelse(is.na(population), median(population, na.rm = TRUE), population))
+
+# Remove columns with more than 50% missing values
+threshold <- 0.5 * nrow(wiid)
+columns_to_remove <- colnames(wiid)[colSums(is.na(wiid)) > threshold]
+wiid <- wiid %>% select(-one_of(columns_to_remove))# Impute missing values for essential columns
+wiid <- wiid %>%
+  group_by(country) %>%
+  mutate(gini = ifelse(is.na(gini), median(gini, na.rm = TRUE), gini),
+         ratio_top20bottom20 = ifelse(is.na(ratio_top20bottom20), median(ratio_top20bottom20, na.rm = TRUE), ratio_top20bottom20),
+         bottom40 = ifelse(is.na(bottom40), median(bottom40, na.rm = TRUE), bottom40),
+         population = ifelse(is.na(population), median(population, na.rm = TRUE), population))
+
+# Remove columns with more than 50% missing values
+threshold <- 0.5 * nrow(wiid)
+columns_to_remove <- colnames(wiid)[colSums(is.na(wiid)) > threshold]
+wiid <- wiid %>% select(-one_of(columns_to_remove))
+
+```
+
+#### World Map of Gini Coefficient
+
+This visualization provides a global perspective on income inequality by mapping the Gini coefficient for each country. The Gini coefficient measures income inequality, with 0 representing perfect equality and 1 (or 100, when scaled) representing maximum inequality.
+
+- Countries with high Gini values (e.g., South Africa, Brazil) indicate a high level of income inequality where wealth is concentrated in the hands of a few.
+
+- Countries with low Gini values (e.g., Scandinavian countries) indicate a more equitable distribution of income.
+
+```{r message=FALSE}
+
+# Calculate median Gini for each country
+median_gini <- wiid %>%
+  group_by(country) %>%
+  summarize(median_gini = median(gini, na.rm = TRUE))
+
+# Get world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Merge median Gini with world map data
+world_gini <- left_join(world, median_gini, by = c("name" = "country"))
+
+# Plot the world map with Gini coefficient
+ggplot(data = world_gini) +
+  geom_sf(aes(fill = median_gini)) +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey50") +
+  labs(title = "World Map of Gini Coefficient",
+       fill = "Gini Coefficient",
+       caption = "Source: World Income Inequality Database") +
+  theme_minimal()
+
+```
+
+#### Boxplot of Gini Coefficient by Country (Top and Bottom 10)
+
+This boxplot highlights the countries with the highest and lowest Gini coefficients, providing a focused view of extreme cases of income inequality.
+
+Economic Disparities: The top 10 countries often have large economic disparities, with significant portions of the population living in poverty while a small elite holds most of the wealth.
+
+Social and Political Factors: Countries with low Gini coefficients may have robust social welfare programs and more equitable economic policies.
+
+```{r}
+# Select top 10 and bottom 10 countries by median Gini coefficient
+top_bottom_countries <- median_gini %>%
+  arrange(median_gini) %>%
+  slice(c(1:10, (n()-9):n()))
+
+wiid_top_bottom <- wiid %>%
+  filter(country %in% top_bottom_countries$country)
+
+# Reorder countries by their median Gini coefficient
+wiid_top_bottom$country <- reorder(wiid_top_bottom$country, wiid_top_bottom$gini, FUN = median)
+
+# Plot with top and bottom countries
+ggplot(wiid_top_bottom, aes(x = country, y = gini)) +
+  geom_boxplot() +
+  coord_flip() +
+  labs(title = "Gini Coefficient by Country (Top and Bottom 10)", x = "Country", y = "Gini Coefficient")
+
+```
+
+```{r}
+democracy <- read_csv("~/Downloads/electoral-democracy-index.csv", show_col_types = FALSE)
+
+# Rename columns for consistency if needed
+democracy <- democracy %>%
+  rename(
+    country = Entity,
+    year = Year,
+    democracy_index = `Electoral democracy index (best estimate, aggregate: average)`
+  )
+
+# Merge democracy index with Gini coefficient data
+combined_data <- wiid %>%
+  inner_join(democracy, by = c("country", "year"))
+
+# Summarize Gini values by country and year
+summary_gini <- combined_data %>%
+  group_by(country) %>%
+  summarize(median_gini = median(gini, na.rm = TRUE))
+
+combined_data <- combined_data %>% left_join(summary_gini, by = "country")
+
+```
+
+#### Gini coefficient by Democracy Index Range
+
+This boxplot examines how income inequality varies across different levels of democracy, categorized by democracy index ranges.
+
+- Democracy and Inequality: There is generally an observable trend where higher democracy index ranges (indicating more democratic governance) are associated with lower Gini coefficients, suggesting that democratic institutions may help reduce income inequality.
+
+- Variation Within Ranges: The spread within each boxplot range shows that while democracies tend to have lower inequality, there is still significant variability. This indicates that other factors (e.g., economic structure, cultural context) also play crucial roles.
+
+```{r}
+# Create a new variable for democracy index ranges
+combined_data <- combined_data %>%
+  mutate(democracy_range = cut(democracy_index, breaks = seq(0, 1, by = 0.1), include.lowest = TRUE),
+         democracy_range2 = cut(democracy_index, breaks = seq(0, 1, by = 0.2), include.lowest = TRUE))
+
+# Boxplot of Gini coefficient by democracy index range
+ggplot(combined_data, aes(x = democracy_range, y = median_gini)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Gini Coefficient by Democracy Index Range", x = "Democracy Index Range", y = "Gini Coefficient") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+```
+
+#### Boxplot of Gini Coefficient by Democracy Index Range and Continent
+
+This visualization breaks down the relationship between democracy and income inequality by continent, providing regional insights.
+
+- Regional Differences: This visualization highlights regional differences in how democracy influences income inequality. For instance, Latin America might show higher Gini coefficients across all democracy ranges compared to Europe.
+
+- Socio-Economic Context: Cultural, historical, and socio-economic contexts can lead to different impacts of democracy on income inequality across regions. For example, African countries may face different challenges and opportunities in addressing income inequality compared to Asian countries.
+
+```{r}
+# Boxplot of Gini coefficient by democracy index range and continent
+ggplot(combined_data, aes(x = democracy_range2, y = median_gini, fill = Continent)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Gini Coefficient by Democracy Index Range and Continent", x = "Democracy Index Range", y = "Gini Coefficient") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ Continent)
+
+
+```
+
+
+
