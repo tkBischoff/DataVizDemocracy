@@ -16,7 +16,7 @@ import plotly.io as pio
 # zabi_scatter(co2_rel_df, "CO2", "HHI", title="CO2 Emissions vs. Religous Mixedness", year = 2010, size="pop", color="primary_rel", uselogx=True)
 # zabi_scatter(rel_df, "edi", "nonreligpct", year=int(year), size="pop", color= "continent", title="Electoral Democracy Index vs. Non-Religious", uselogy=True, savedontshow=True, location="relig_scatter_plots")
 # zabi_scatter(rel_df, "edi", "HHI", year=int(year), size="pop", color= "continent", title="Electoral Democracy Index vs. Religious Diversity", uselogy=False, savedontshow=True, location="relig_scatter_plots")
-def zabi_scatter(df: pd.DataFrame, x: str, y: str, year: int, size: str, color: str, title: str, uselogx=False, uselogy=False, savedontshow=False, location=""):
+def zabi_scatter(df: pd.DataFrame, name, x: str, y: str, year: int, size: str, color: str, title: str, uselogx=False, uselogy=False, savedontshow=False, location=""):
     if year != 0:
         df = df[df["Year"]==year]
     if size is not None:
@@ -61,9 +61,11 @@ def zabi_scatter(df: pd.DataFrame, x: str, y: str, year: int, size: str, color: 
             height=800,
             yaxis_type="log"
         )        
+    fig.update_layout(
+        width=700,
+        height=500
+    )
 
     # Show the plot
-    if savedontshow:
-        pio.write_html(fig, f"/Users/pwecker/dev/DataVizDemocracy/plots_paul/relig_scatter_plots/{title}_{year}_interactive.html")
-    else:
-        fig.show()
+    pio.write_html(fig, f"plots/{name}.html")
+    fig.show()
