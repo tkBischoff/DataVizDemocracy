@@ -62,8 +62,8 @@ def zabi_scatter(df: pd.DataFrame, name, x: str, y: str, year: int, size: str, c
             yaxis_type="log"
         )        
     fig.update_layout(
-        width=700,
-        height=500
+        width=900,
+        height=600
     )
 
     # Show the plot
